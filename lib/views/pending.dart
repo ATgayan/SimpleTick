@@ -1,4 +1,9 @@
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../models/todo.dart';
+import '../viewmodels/todo_viewmodel.dart';
 
 class _C {
   static const sky = Color(0xFF5BC0F8);
@@ -8,30 +13,8 @@ class _C {
   static const muted = Color(0xFF6B84A3);
 }
 
-/// Simple task model used by this screen.
-/// Replace with your own model / data source.
-class PendingTask {
-  final int id;
-  final String title;
-  final String description;
-  final String category; // Personal, Work, Study, Shopping
-  final String priority; // Low, Medium, High
-  final DateTime? due;
-
-  const PendingTask({
-    required this.id,
-    required this.title,
-    this.description = '',
-    this.category = 'Personal',
-    this.priority = 'Medium',
-    this.due,
-  });
-}
-
 class PendingScreen extends StatefulWidget {
-  /// Pass your real pending tasks here. If null, demo data is shown.
-  final List<PendingTask>? tasks;
-  const PendingScreen({super.key, this.tasks});
+  const PendingScreen({super.key});
 
   @override
   State<PendingScreen> createState() => _PendingScreenState();
@@ -40,19 +23,25 @@ class PendingScreen extends StatefulWidget {
 class _PendingScreenState extends State<PendingScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _enter;
-  late List<PendingTask> _tasks;
+
+  List<Todo> _tasks = [];
   String _filter = 'All';
+  bool _isLoading = true;
 
   static const _filters = ['All', 'High', 'Medium', 'Low'];
 
   @override
   void initState() {
     super.initState();
-    _tasks = List.of(widget.tasks ?? _demoTasks());
+
     _enter = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
     )..forward();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPendingTasks();
+    });
   }
 
   @override
@@ -61,101 +50,133 @@ class _PendingScreenState extends State<PendingScreen>
     super.dispose();
   }
 
-  List<PendingTask> _demoTasks() {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    return [
-      PendingTask(
-        id: 1,
-        title: 'Finish project report',
-        description: 'Complete the final section and send it to the team.',
-        category: 'Work',
-        priority: 'High',
-        due: today.subtract(const Duration(days: 1)),
-      ),
-      PendingTask(
-        id: 2,
-        title: 'Buy groceries',
-        description: 'Milk, eggs, fruits and vegetables.',
-        category: 'Shopping',
-        priority: 'Medium',
-        due: today,
-      ),
-      PendingTask(
-        id: 3,
-        title: 'Study Flutter animations',
-        description: 'Watch the tutorial and practice implicit animations.',
-        category: 'Study',
-        priority: 'High',
-        due: today.add(const Duration(days: 1)),
-      ),
-      PendingTask(
-        id: 4,
-        title: 'Call the dentist',
-        category: 'Personal',
-        priority: 'Low',
-        due: today.add(const Duration(days: 4)),
-      ),
-      PendingTask(
-        id: 5,
-        title: 'Plan weekend trip',
-        description: 'Check bus times and book a room.',
-        category: 'Personal',
-        priority: 'Medium',
-      ),
-    ];
-  }
+  // Load pending tasks from SQLite through the ViewModel.
+  Future<void> _loadPendingTasks() async {
+    if (!mounted) return;
 
-  List<PendingTask> get _visible => _filter == 'All'
-      ? _tasks
-      : _tasks.where((t) => t.priority == _filter).toList();
+    setState(() => _isLoading = true);
 
-  // ───────────────────────── Actions ─────────────────────────
-  void _complete(PendingTask task) {
-    final index = _tasks.indexWhere((t) => t.id == task.id);
-    if (index == -1) return;
-    setState(() => _tasks.removeAt(index));
-    _snack('Marked as completed ✅', onUndo: () {
-      setState(() => _tasks.insert(index.clamp(0, _tasks.length), task));
-    });
-    // TODO: update the task in your database / provider here.
-  }
+    try {
+      final viewModel = context.read<TodoViewModel>();
 
-  void _delete(PendingTask task) {
-    final index = _tasks.indexWhere((t) => t.id == task.id);
-    if (index == -1) return;
-    setState(() => _tasks.removeAt(index));
-    _snack('Task deleted', onUndo: () {
-      setState(() => _tasks.insert(index.clamp(0, _tasks.length), task));
-    });
-    // TODO: delete the task from your database / provider here.
-  }
+      await viewModel.getPendingTodos();
 
-  void _snack(String text, {VoidCallback? onUndo}) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: _C.deepBlue,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          content: Text(text),
-          action: onUndo == null
-              ? null
-              : SnackBarAction(
-            label: 'UNDO',
-            textColor: Colors.white,
-            onPressed: onUndo,
+      if (!mounted) return;
+
+      setState(() {
+        _tasks = List<Todo>.from(viewModel.todos);
+      });
+    } catch (e) {
+      debugPrint('Error loading pending tasks: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to load pending tasks'),
           ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  List<Todo> get _visible {
+    if (_filter == 'All') {
+      return _tasks;
+    }
+
+    return _tasks
+        .where((task) => task.priority == _filter)
+        .toList();
+  }
+
+  // Mark task as completed in the database.
+  Future<void> _complete(Todo task) async {
+    if (task.id == null) return;
+
+    try {
+      final viewModel = context.read<TodoViewModel>();
+
+      await viewModel.updateTodo(
+        task.copyWith(completed: true),
+      );
+
+      if (!mounted) return;
+
+      await _loadPendingTasks();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Task completed! ✅'),
+          behavior: SnackBarBehavior.floating,
         ),
       );
+    } catch (e) {
+      debugPrint('Error completing task: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to complete task'),
+          ),
+        );
+
+        await _loadPendingTasks();
+      }
+    }
+  }
+
+  // Delete task from the database.
+  Future<void> _delete(Todo task) async {
+    if (task.id == null) return;
+
+    try {
+      final viewModel = context.read<TodoViewModel>();
+
+      await viewModel.deleteTodo(task.id!);
+
+      if (!mounted) return;
+
+      await _loadPendingTasks();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Task deleted'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error deleting task: $e');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete task'),
+          ),
+        );
+
+        await _loadPendingTasks();
+      }
+    }
   }
 
   Widget _reveal(Widget child, double begin, double end) {
     final curve = CurvedAnimation(
       parent: _enter,
-      curve: Interval(begin, end, curve: Curves.easeOutCubic),
+      curve: Interval(
+        begin,
+        end,
+        curve: Curves.easeOutCubic,
+      ),
     );
+
     return FadeTransition(
       opacity: curve,
       child: SlideTransition(
@@ -168,7 +189,6 @@ class _PendingScreenState extends State<PendingScreen>
     );
   }
 
-  // ───────────────────────────── UI ─────────────────────────────
   @override
   Widget build(BuildContext context) {
     final list = _visible;
@@ -181,7 +201,11 @@ class _PendingScreenState extends State<PendingScreen>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFBFE6FF), Color(0xFFE6F5FF), Colors.white],
+            colors: [
+              Color(0xFFBFE6FF),
+              Color(0xFFE6F5FF),
+              Colors.white,
+            ],
             stops: [0.0, 0.45, 1.0],
           ),
         ),
@@ -190,19 +214,27 @@ class _PendingScreenState extends State<PendingScreen>
             Positioned(
               top: -70,
               right: -60,
-              child: _blob(220, _C.sky.withValues(alpha: 0.22)),
+              child: _blob(
+                220,
+                _C.sky.withValues(alpha: 0.22),
+              ),
             ),
             Positioned(
               bottom: -90,
               left: -70,
-              child: _blob(260, _C.blue.withValues(alpha: 0.10)),
+              child: _blob(
+                260,
+                _C.blue.withValues(alpha: 0.10),
+              ),
             ),
             SafeArea(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 10, 22, 0),
+                    padding: const EdgeInsets.fromLTRB(
+                      22, 10, 22, 0,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -216,25 +248,47 @@ class _PendingScreenState extends State<PendingScreen>
                     ),
                   ),
                   Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 350),
+                    child: _isLoading
+                        ? const Center(
+                      child: CircularProgressIndicator(
+                        color: _C.deepBlue,
+                      ),
+                    )
+                        : AnimatedSwitcher(
+                      duration: const Duration(
+                        milliseconds: 350,
+                      ),
                       child: list.isEmpty
                           ? _buildEmpty()
-                          : ListView.builder(
-                        key: ValueKey(_filter),
-                        physics: const BouncingScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(22, 4, 22, 30),
-                        itemCount: list.length,
-                        itemBuilder: (context, i) {
-                          final task = list[i];
-                          return _PendingCard(
-                            key: ValueKey(task.id),
-                            task: task,
-                            index: i,
-                            onComplete: () => _complete(task),
-                            onDelete: () => _delete(task),
-                          );
-                        },
+                          : RefreshIndicator(
+                        color: _C.deepBlue,
+                        onRefresh: _loadPendingTasks,
+                        child: ListView.builder(
+                          key: ValueKey(_filter),
+                          physics:
+                          const AlwaysScrollableScrollPhysics(
+                            parent:
+                            BouncingScrollPhysics(),
+                          ),
+                          padding:
+                          const EdgeInsets.fromLTRB(
+                            22, 4, 22, 30,
+                          ),
+                          itemCount: list.length,
+                          itemBuilder: (context, i) {
+                            final task = list[i];
+
+                            return _PendingCard(
+                              key: ValueKey(task.id),
+                              task: task,
+                              index: i,
+                              onComplete: () =>
+                                  _complete(task),
+                              onDelete: () =>
+                                  _delete(task),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -293,7 +347,10 @@ class _PendingScreenState extends State<PendingScreen>
               ),
             ],
           ),
-          child: const Icon(Icons.task_alt_rounded, color: Colors.white),
+          child: const Icon(
+            Icons.task_alt_rounded,
+            color: Colors.white,
+          ),
         ),
       ],
     );
@@ -320,7 +377,10 @@ class _PendingScreenState extends State<PendingScreen>
                 _tasks.isEmpty
                     ? 'Nothing left to do'
                     : 'Swipe right to complete, left to delete',
-                style: const TextStyle(fontSize: 14.5, color: _C.muted),
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  color: _C.muted,
+                ),
               ),
             ],
           ),
@@ -328,7 +388,12 @@ class _PendingScreenState extends State<PendingScreen>
         const SizedBox(width: 12),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
-          transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+          transitionBuilder: (child, animation) {
+            return ScaleTransition(
+              scale: animation,
+              child: child,
+            );
+          },
           child: Container(
             key: ValueKey(_tasks.length),
             width: 56,
@@ -339,7 +404,10 @@ class _PendingScreenState extends State<PendingScreen>
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFFFFB74D), Color(0xFFF57C00)],
+                colors: [
+                  Color(0xFFFFB74D),
+                  Color(0xFFF57C00),
+                ],
               ),
               boxShadow: [
                 BoxShadow(
@@ -370,33 +438,43 @@ class _PendingScreenState extends State<PendingScreen>
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: _filters.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        separatorBuilder: (_, __) =>
+        const SizedBox(width: 10),
         itemBuilder: (context, i) {
-          final f = _filters[i];
-          final selected = _filter == f;
+          final filter = _filters[i];
+          final selected = _filter == filter;
+
           return _PressScale(
-            onTap: () => setState(() => _filter = f),
+            onTap: () {
+              setState(() => _filter = filter);
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeOut,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+              ),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 gradient: selected
-                    ? const LinearGradient(colors: [_C.sky, _C.deepBlue])
+                    ? const LinearGradient(
+                  colors: [_C.sky, _C.deepBlue],
+                )
                     : null,
                 color: selected ? null : Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    color: _C.blue.withValues(alpha: selected ? 0.3 : 0.08),
+                    color: _C.blue.withValues(
+                      alpha: selected ? 0.3 : 0.08,
+                    ),
                     blurRadius: 12,
                     offset: const Offset(0, 5),
                   ),
                 ],
               ),
               child: Text(
-                f,
+                filter,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: selected ? Colors.white : _C.ink,
@@ -419,7 +497,12 @@ class _PendingScreenState extends State<PendingScreen>
             tween: Tween(begin: 0.6, end: 1),
             duration: const Duration(milliseconds: 700),
             curve: Curves.elasticOut,
-            builder: (_, v, child) => Transform.scale(scale: v, child: child),
+            builder: (_, value, child) {
+              return Transform.scale(
+                scale: value,
+                child: child,
+              );
+            },
             child: Container(
               width: 110,
               height: 110,
@@ -428,7 +511,10 @@ class _PendingScreenState extends State<PendingScreen>
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Color(0xFF64C8FF), Color(0xFF1E88E5)],
+                  colors: [
+                    Color(0xFF64C8FF),
+                    Color(0xFF1E88E5),
+                  ],
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -447,7 +533,9 @@ class _PendingScreenState extends State<PendingScreen>
           ),
           const SizedBox(height: 22),
           Text(
-            _tasks.isEmpty ? 'All caught up!' : 'No $_filter priority tasks',
+            _tasks.isEmpty
+                ? 'All caught up!'
+                : 'No $_filter priority tasks',
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w900,
@@ -457,23 +545,31 @@ class _PendingScreenState extends State<PendingScreen>
           const SizedBox(height: 6),
           const Text(
             'Enjoy your free time 🎉',
-            style: TextStyle(fontSize: 15, color: _C.muted),
+            style: TextStyle(
+              fontSize: 15,
+              color: _C.muted,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _blob(double size, Color color) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-  );
+  Widget _blob(double size, Color color) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+      ),
+    );
+  }
 }
 
-// ─────────────────────────── Task card ───────────────────────────
+// Pending task card.
 class _PendingCard extends StatefulWidget {
-  final PendingTask task;
+  final Todo task;
   final int index;
   final VoidCallback onComplete;
   final VoidCallback onDelete;
@@ -498,6 +594,7 @@ class _PendingCardState extends State<_PendingCard>
   @override
   void initState() {
     super.initState();
+
     _exit = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 350),
@@ -513,11 +610,20 @@ class _PendingCardState extends State<_PendingCard>
 
   Future<void> _tapComplete() async {
     if (_checked) return;
+
     setState(() => _checked = true);
-    await Future.delayed(const Duration(milliseconds: 350));
+
+    await Future.delayed(
+      const Duration(milliseconds: 350),
+    );
+
     if (!mounted) return;
+
     await _exit.reverse();
-    if (mounted) widget.onComplete();
+
+    if (mounted) {
+      widget.onComplete();
+    }
   }
 
   Color get _priorityColor {
@@ -545,20 +651,27 @@ class _PendingCardState extends State<_PendingCard>
   }
 
   (String, bool) get _dueInfo {
-    final due = widget.task.due;
-    if (due == null) return ('No due date', false);
+    final due = widget.task.dueDate;
+
+    if (due == null) {
+      return ('No due date', false);
+    }
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final d = DateTime(due.year, due.month, due.day);
-    final diff = d.difference(today).inDays;
+    final date = DateTime(due.year, due.month, due.day);
+    final diff = date.difference(today).inDays;
+
     if (diff < 0) return ('Overdue', true);
     if (diff == 0) return ('Today', false);
     if (diff == 1) return ('Tomorrow', false);
-    const m = [
+
+    const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
-    return ('${m[d.month - 1]} ${d.day}', false);
+
+    return ('${months[due.month - 1]} ${due.day}', false);
   }
 
   @override
@@ -571,15 +684,20 @@ class _PendingCardState extends State<_PendingCard>
       tween: Tween(begin: 0, end: 1),
       duration: Duration(milliseconds: delay),
       curve: Curves.easeOutCubic,
-      builder: (context, v, child) => Opacity(
-        opacity: v,
-        child: Transform.translate(
-          offset: Offset(0, 24 * (1 - v)),
-          child: child,
-        ),
-      ),
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 24 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
       child: SizeTransition(
-        sizeFactor: CurvedAnimation(parent: _exit, curve: Curves.easeInOut),
+        sizeFactor: CurvedAnimation(
+          parent: _exit,
+          curve: Curves.easeInOut,
+        ),
         child: FadeTransition(
           opacity: _exit,
           child: Padding(
@@ -598,8 +716,9 @@ class _PendingCardState extends State<_PendingCard>
                 label: 'Delete',
                 alignment: Alignment.centerRight,
               ),
-              onDismissed: (dir) {
-                if (dir == DismissDirection.startToEnd) {
+              onDismissed: (direction) {
+                if (direction ==
+                    DismissDirection.startToEnd) {
                   widget.onComplete();
                 } else {
                   widget.onDelete();
@@ -622,15 +741,27 @@ class _PendingCardState extends State<_PendingCard>
                   borderRadius: BorderRadius.circular(22),
                   child: IntrinsicHeight(
                     child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment:
+                      CrossAxisAlignment.stretch,
                       children: [
-                        Container(width: 6, color: _priorityColor),
+                        Container(
+                          width: 6,
+                          color: _priorityColor,
+                        ),
                         Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+                            padding: const EdgeInsets.fromLTRB(
+                              14, 14, 10, 14,
+                            ),
                             child: Row(
                               children: [
-                                Expanded(child: _content(task, dueText, overdue)),
+                                Expanded(
+                                  child: _content(
+                                    task,
+                                    dueText,
+                                    overdue,
+                                  ),
+                                ),
                                 const SizedBox(width: 8),
                                 _checkButton(),
                               ],
@@ -649,7 +780,11 @@ class _PendingCardState extends State<_PendingCard>
     );
   }
 
-  Widget _content(PendingTask task, String dueText, bool overdue) {
+  Widget _content(
+      Todo task,
+      String dueText,
+      bool overdue,
+      ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -659,7 +794,8 @@ class _PendingCardState extends State<_PendingCard>
             fontSize: 16.5,
             fontWeight: FontWeight.w800,
             color: _checked ? _C.muted : _C.ink,
-            decoration: _checked ? TextDecoration.lineThrough : null,
+            decoration:
+            _checked ? TextDecoration.lineThrough : null,
           ),
           child: Text(task.title),
         ),
@@ -669,7 +805,11 @@ class _PendingCardState extends State<_PendingCard>
             task.description,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, color: _C.muted, height: 1.3),
+            style: const TextStyle(
+              fontSize: 13,
+              color: _C.muted,
+              height: 1.3,
+            ),
           ),
         ],
         const SizedBox(height: 10),
@@ -677,22 +817,45 @@ class _PendingCardState extends State<_PendingCard>
           spacing: 8,
           runSpacing: 6,
           children: [
-            _chip(_categoryIcon, task.category, _C.blue),
             _chip(
-              overdue ? Icons.warning_amber_rounded : Icons.schedule_rounded,
+              _categoryIcon,
+              task.category,
+              _C.blue,
+            ),
+            _chip(
+              overdue
+                  ? Icons.warning_amber_rounded
+                  : Icons.schedule_rounded,
               dueText,
               overdue ? Colors.red : _C.muted,
             ),
-            _chip(Icons.flag_rounded, task.priority, _priorityColor),
+            _chip(
+              Icons.flag_rounded,
+              task.priority,
+              _priorityColor,
+            ),
+            if (task.important)
+              _chip(
+                Icons.star_rounded,
+                'Important',
+                Colors.deepPurple,
+              ),
           ],
         ),
       ],
     );
   }
 
-  Widget _chip(IconData icon, String text, Color color) {
+  Widget _chip(
+      IconData icon,
+      String text,
+      Color color,
+      ) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 4,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
@@ -726,10 +889,14 @@ class _PendingCardState extends State<_PendingCard>
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: _checked
-              ? const LinearGradient(colors: [_C.sky, _C.deepBlue])
+              ? const LinearGradient(
+            colors: [_C.sky, _C.deepBlue],
+          )
               : null,
           border: Border.all(
-            color: _checked ? Colors.transparent : _C.sky,
+            color: _checked
+                ? Colors.transparent
+                : _C.sky,
             width: 2,
           ),
         ),
@@ -737,7 +904,11 @@ class _PendingCardState extends State<_PendingCard>
           scale: _checked ? 1 : 0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.elasticOut,
-          child: const Icon(Icons.check_rounded, color: Colors.white, size: 20),
+          child: const Icon(
+            Icons.check_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
         ),
       ),
     );
@@ -750,6 +921,7 @@ class _PendingCardState extends State<_PendingCard>
     required Alignment alignment,
   }) {
     final left = alignment == Alignment.centerLeft;
+
     return Container(
       alignment: alignment,
       padding: const EdgeInsets.symmetric(horizontal: 22),
@@ -780,11 +952,15 @@ class _PendingCardState extends State<_PendingCard>
   );
 }
 
-/// Shrinks slightly while pressed.
+// Button animation.
 class _PressScale extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
-  const _PressScale({required this.child, required this.onTap});
+
+  const _PressScale({
+    required this.child,
+    required this.onTap,
+  });
 
   @override
   State<_PressScale> createState() => _PressScaleState();
