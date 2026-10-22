@@ -1,4 +1,9 @@
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../models/todo.dart';
+import '../viewmodels/todo_viewmodel.dart';
 
 class _C {
   static const sky = Color(0xFF5BC0F8);
@@ -11,30 +16,8 @@ class _C {
   static const red = Color(0xFFE53935);
 }
 
-/// Simple task model used by this screen.
-/// Replace with your own model / data source.
-class ImportantTask {
-  final int id;
-  final String title;
-  final String description;
-  final String category; // Personal, Work, Study, Shopping
-  final String priority; // Low, Medium, High
-  final DateTime? due;
-
-  const ImportantTask({
-    required this.id,
-    required this.title,
-    this.description = '',
-    this.category = 'Personal',
-    this.priority = 'High',
-    this.due,
-  });
-}
-
 class ImportantScreen extends StatefulWidget {
-  /// Pass your real important tasks here. If null, demo data is shown.
-  final List<ImportantTask>? tasks;
-  const ImportantScreen({super.key, this.tasks});
+  const ImportantScreen({super.key});
 
   @override
   State<ImportantScreen> createState() => _ImportantScreenState();
@@ -43,19 +26,29 @@ class ImportantScreen extends StatefulWidget {
 class _ImportantScreenState extends State<ImportantScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _enter;
-  late List<ImportantTask> _tasks;
   String _filter = 'All';
 
-  static const _filters = ['All', 'Overdue', 'Today', 'Upcoming'];
+  static const _filters = [
+    'All',
+    'Overdue',
+    'Today',
+    'Upcoming',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _tasks = List.of(widget.tasks ?? _demoTasks());
+
     _enter = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 800),
     )..forward();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<TodoViewModel>().getImportantTodos();
+      }
+    });
   }
 
   @override
@@ -64,241 +57,337 @@ class _ImportantScreenState extends State<ImportantScreen>
     super.dispose();
   }
 
-  List<ImportantTask> _demoTasks() {
+  int? _daysLeft(Todo task) {
+    if (task.dueDate == null) return null;
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    return [
-      ImportantTask(
-        id: 1,
-        title: 'Finish project report',
-        description: 'Complete the final section and send it to the team.',
-        category: 'Work',
-        priority: 'High',
-        due: today.subtract(const Duration(days: 1)),
-      ),
-      ImportantTask(
-        id: 2,
-        title: 'Pay tuition fee',
-        description: 'Deadline is strict, late fee applies after today.',
-        category: 'Study',
-        priority: 'High',
-        due: today,
-      ),
-      ImportantTask(
-        id: 3,
-        title: 'Prepare presentation slides',
-        description: 'Add charts and rehearse the demo once.',
-        category: 'Work',
-        priority: 'High',
-        due: today.add(const Duration(days: 2)),
-      ),
-      ImportantTask(
-        id: 4,
-        title: 'Renew passport',
-        category: 'Personal',
-        priority: 'Medium',
-        due: today.add(const Duration(days: 9)),
-      ),
-      ImportantTask(
-        id: 5,
-        title: 'Book flight tickets',
-        description: 'Compare prices before booking.',
-        category: 'Personal',
-        priority: 'Medium',
-      ),
-    ];
+
+    final due = task.dueDate!;
+    final dueDay = DateTime(due.year, due.month, due.day);
+
+    return dueDay.difference(today).inDays;
   }
 
-  // ───────────────────────── Helpers ─────────────────────────
-  int? _daysLeft(ImportantTask t) {
-    if (t.due == null) return null;
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final d = DateTime(t.due!.year, t.due!.month, t.due!.day);
-    return d.difference(today).inDays;
-  }
+  List<Todo> _visibleTasks(List<Todo> tasks) {
+    Iterable<Todo> result = tasks.where(
+          (task) => task.important && !task.completed,
+    );
 
-  int get _overdueCount =>
-      _tasks.where((t) => (_daysLeft(t) ?? 0) < 0).length;
-  int get _todayCount => _tasks.where((t) => _daysLeft(t) == 0).length;
-  int get _upcomingCount =>
-      _tasks.where((t) => (_daysLeft(t) ?? -1) > 0).length;
-
-  List<ImportantTask> get _visible {
-    Iterable<ImportantTask> list = _tasks;
     switch (_filter) {
       case 'Overdue':
-        list = list.where((t) => (_daysLeft(t) ?? 0) < 0);
+        result = result.where(
+              (task) => (_daysLeft(task) ?? 0) < 0,
+        );
         break;
+
       case 'Today':
-        list = list.where((t) => _daysLeft(t) == 0);
+        result = result.where(
+              (task) => _daysLeft(task) == 0,
+        );
         break;
+
       case 'Upcoming':
-        list = list.where((t) => (_daysLeft(t) ?? -1) > 0);
+        result = result.where(
+              (task) => (_daysLeft(task) ?? -1) > 0,
+        );
         break;
     }
-    // Most urgent first, tasks with no due date last.
-    final sorted = list.toList()
-      ..sort((a, b) {
-        final da = _daysLeft(a);
-        final db = _daysLeft(b);
-        if (da == null && db == null) return 0;
-        if (da == null) return 1;
-        if (db == null) return -1;
-        return da.compareTo(db);
-      });
+
+    final sorted = result.toList();
+
+    sorted.sort((a, b) {
+      final da = _daysLeft(a);
+      final db = _daysLeft(b);
+
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+
+      return da.compareTo(db);
+    });
+
     return sorted;
   }
 
-  // ───────────────────────── Actions ─────────────────────────
-  void _complete(ImportantTask task) {
-    final index = _tasks.indexWhere((t) => t.id == task.id);
-    if (index == -1) return;
-    setState(() => _tasks.removeAt(index));
-    _snack('Marked as completed ✅', onUndo: () {
-      setState(() => _tasks.insert(index.clamp(0, _tasks.length), task));
-    });
-    // TODO: mark the task as completed in your database / provider here.
+  Future<void> _complete(Todo task) async {
+    if (task.id == null) return;
+
+    final vm = context.read<TodoViewModel>();
+
+    try {
+      await vm.updateTodo(
+        task.copyWith(completed: true),
+      );
+
+      if (!mounted) return;
+
+      await vm.getImportantTodos();
+
+      if (!mounted) return;
+      _snack('Task completed successfully ✅');
+    } catch (e) {
+      if (mounted) {
+        _snack('Could not complete task: $e');
+      }
+    }
   }
 
-  void _unmark(ImportantTask task) {
-    final index = _tasks.indexWhere((t) => t.id == task.id);
-    if (index == -1) return;
-    setState(() => _tasks.removeAt(index));
-    _snack('Removed from important', onUndo: () {
-      setState(() => _tasks.insert(index.clamp(0, _tasks.length), task));
-    });
-    // TODO: remove the "important" flag in your database / provider here.
+  Future<void> _unmark(Todo task) async {
+    if (task.id == null) return;
+
+    final vm = context.read<TodoViewModel>();
+
+    try {
+      await vm.updateTodo(
+        task.copyWith(important: false),
+      );
+
+      if (!mounted) return;
+
+      await vm.getImportantTodos();
+
+      if (mounted) {
+        _snack('Removed from important tasks');
+      }
+    } catch (e) {
+      if (mounted) {
+        _snack('Could not update task: $e');
+      }
+    }
   }
 
-  void _delete(ImportantTask task) {
-    final index = _tasks.indexWhere((t) => t.id == task.id);
-    if (index == -1) return;
-    setState(() => _tasks.removeAt(index));
-    _snack('Task deleted', onUndo: () {
-      setState(() => _tasks.insert(index.clamp(0, _tasks.length), task));
-    });
-    // TODO: delete the task from your database / provider here.
+  Future<void> _delete(Todo task) async {
+    if (task.id == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete task?'),
+        content: Text(
+          'Are you sure you want to delete "${task.title}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: _C.red),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    final vm = context.read<TodoViewModel>();
+
+    try {
+      await vm.deleteTodo(task.id!);
+
+      if (!mounted) return;
+
+      await vm.getImportantTodos();
+
+      if (mounted) {
+        _snack('Task deleted');
+      }
+    } catch (e) {
+      if (mounted) {
+        _snack('Could not delete task: $e');
+      }
+    }
   }
 
-  void _snack(String text, {VoidCallback? onUndo}) {
+  void _snack(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
+          content: Text(message),
           behavior: SnackBarBehavior.floating,
           backgroundColor: _C.deepBlue,
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          content: Text(text),
-          action: onUndo == null
-              ? null
-              : SnackBarAction(
-            label: 'UNDO',
-            textColor: Colors.white,
-            onPressed: onUndo,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       );
   }
 
   Widget _reveal(Widget child, double begin, double end) {
-    final curve = CurvedAnimation(
+    final animation = CurvedAnimation(
       parent: _enter,
-      curve: Interval(begin, end, curve: Curves.easeOutCubic),
+      curve: Interval(
+        begin,
+        end,
+        curve: Curves.easeOutCubic,
+      ),
     );
+
     return FadeTransition(
-      opacity: curve,
+      opacity: animation,
       child: SlideTransition(
         position: Tween<Offset>(
-          begin: const Offset(0, 0.15),
+          begin: const Offset(0, 0.12),
           end: Offset.zero,
-        ).animate(curve),
+        ).animate(animation),
         child: child,
       ),
     );
   }
 
-  // ───────────────────────────── UI ─────────────────────────────
   @override
   Widget build(BuildContext context) {
-    final list = _visible;
+    return Consumer<TodoViewModel>(
+      builder: (context, vm, child) {
+        // This assumes TodoViewModel exposes its current list
+        // through a public `todos` getter.
+        final allTasks = vm.todos;
 
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFBFE6FF), Color(0xFFE6F5FF), Colors.white],
-            stops: [0.0, 0.45, 1.0],
-          ),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              top: -70,
-              right: -60,
-              child: _blob(220, _C.sky.withValues(alpha: 0.22)),
-            ),
-            Positioned(
-              bottom: -90,
-              left: -70,
-              child: _blob(260, _C.amber.withValues(alpha: 0.10)),
-            ),
-            SafeArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 10, 22, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _reveal(_buildTopBar(), 0.0, 0.4),
-                        const SizedBox(height: 20),
-                        _reveal(_buildHeading(), 0.1, 0.5),
-                        const SizedBox(height: 16),
-                        _reveal(_buildSummary(), 0.15, 0.55),
-                        const SizedBox(height: 16),
-                        _reveal(_buildFilters(), 0.2, 0.6),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 350),
-                      child: list.isEmpty
-                          ? _buildEmpty()
-                          : ListView.builder(
-                        key: ValueKey(_filter),
-                        physics: const BouncingScrollPhysics(),
-                        padding:
-                        const EdgeInsets.fromLTRB(22, 4, 22, 30),
-                        itemCount: list.length,
-                        itemBuilder: (context, i) {
-                          final task = list[i];
-                          return _ImportantCard(
-                            key: ValueKey(task.id),
-                            task: task,
-                            index: i,
-                            onComplete: () => _complete(task),
-                            onUnmark: () => _unmark(task),
-                            onDelete: () => _delete(task),
-                          );
-                        },
-                      ),
-                    ),
-                  ),
+        final tasks = allTasks
+            .where((t) => t.important && !t.completed)
+            .toList();
+
+        final visible = _visibleTasks(tasks);
+
+        final overdueCount = tasks
+            .where((t) => (_daysLeft(t) ?? 0) < 0)
+            .length;
+
+        final todayCount = tasks
+            .where((t) => _daysLeft(t) == 0)
+            .length;
+
+        final upcomingCount = tasks
+            .where((t) => (_daysLeft(t) ?? -1) > 0)
+            .length;
+
+        return Scaffold(
+          backgroundColor: const Color(0xFFE6F5FF),
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFFBFE6FF),
+                  Color(0xFFE6F5FF),
+                  Colors.white,
                 ],
+                stops: [0.0, 0.45, 1.0],
               ),
             ),
-          ],
-        ),
-      ),
+            child: Stack(
+              children: [
+                Positioned(
+                  top: -70,
+                  right: -60,
+                  child: _blob(
+                    220,
+                    _C.sky.withValues(alpha: 0.22),
+                  ),
+                ),
+                Positioned(
+                  bottom: -90,
+                  left: -70,
+                  child: _blob(
+                    260,
+                    _C.amber.withValues(alpha: 0.10),
+                  ),
+                ),
+                SafeArea(
+                  child: Column(
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          22, 10, 22, 0,
+                        ),
+                        child: Column(
+                          crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                          children: [
+                            _reveal(_buildTopBar(), 0.0, 0.4),
+                            const SizedBox(height: 20),
+                            _reveal(
+                              _buildHeading(tasks.length),
+                              0.1,
+                              0.5,
+                            ),
+                            const SizedBox(height: 16),
+                            _reveal(
+                              _buildSummary(
+                                overdueCount,
+                                todayCount,
+                                upcomingCount,
+                              ),
+                              0.15,
+                              0.55,
+                            ),
+                            const SizedBox(height: 16),
+                            _reveal(_buildFilters(), 0.2, 0.6),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: vm.isLoading
+                            ? const Center(
+                          child: CircularProgressIndicator(
+                            color: _C.deepBlue,
+                          ),
+                        )
+                            : AnimatedSwitcher(
+                          duration: const Duration(
+                            milliseconds: 300,
+                          ),
+                          child: visible.isEmpty
+                              ? _buildEmpty(tasks.isEmpty)
+                              : ListView.builder(
+                            key: ValueKey(_filter),
+                            physics:
+                            const BouncingScrollPhysics(),
+                            padding:
+                            const EdgeInsets.fromLTRB(
+                              22, 4, 22, 30,
+                            ),
+                            itemCount: visible.length,
+                            itemBuilder: (context, i) {
+                              final task = visible[i];
+
+                              return _ImportantCard(
+                                key: ValueKey(task.id),
+                                task: task,
+                                index: i,
+                                onComplete: () =>
+                                    _complete(task),
+                                onUnmark: () =>
+                                    _unmark(task),
+                                onDelete: () =>
+                                    _delete(task),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -306,12 +395,12 @@ class _ImportantScreenState extends State<ImportantScreen>
     return Row(
       children: [
         _PressScale(
-          onTap: () => Navigator.pop(context),
+          onTap: () => Navigator.maybePop(context),
           child: Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.75),
+              color: Colors.white.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.white),
               boxShadow: [
@@ -336,32 +425,33 @@ class _ImportantScreenState extends State<ImportantScreen>
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
             gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
               colors: [Color(0xFFFFCA28), _C.amberDark],
             ),
             boxShadow: [
               BoxShadow(
-                color: _C.amber.withValues(alpha: 0.45),
+                color: _C.amber.withValues(alpha: 0.35),
                 blurRadius: 14,
                 offset: const Offset(0, 7),
               ),
             ],
           ),
-          child: const Icon(Icons.star_rounded, color: Colors.white),
+          child: const Icon(
+            Icons.star_rounded,
+            color: Colors.white,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildHeading() {
+  Widget _buildHeading(int count) {
     return Row(
       children: [
-        Expanded(
+        const Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Important',
                 style: TextStyle(
                   fontSize: 32,
@@ -370,42 +460,39 @@ class _ImportantScreenState extends State<ImportantScreen>
                   height: 1.1,
                 ),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: 6),
               Text(
-                _tasks.isEmpty
-                    ? 'No important tasks'
-                    : 'Swipe right to unmark, left to delete',
-                style: const TextStyle(fontSize: 14.5, color: _C.muted),
+                'Your starred tasks, all in one place',
+                style: TextStyle(
+                  fontSize: 14.5,
+                  color: _C.muted,
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 12),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
-          transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
           child: Container(
-            key: ValueKey(_tasks.length),
+            key: ValueKey(count),
             width: 56,
             height: 56,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
               gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
                 colors: [Color(0xFFFFCA28), _C.amberDark],
               ),
               boxShadow: [
                 BoxShadow(
-                  color: _C.amber.withValues(alpha: 0.45),
+                  color: _C.amber.withValues(alpha: 0.35),
                   blurRadius: 16,
                   offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: Text(
-              '${_tasks.length}',
+              '$count',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 22,
@@ -418,11 +505,18 @@ class _ImportantScreenState extends State<ImportantScreen>
     );
   }
 
-  Widget _buildSummary() {
+  Widget _buildSummary(
+      int overdue,
+      int today,
+      int upcoming,
+      ) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      padding: const EdgeInsets.symmetric(
+        vertical: 16,
+        horizontal: 8,
+      ),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
+        color: Colors.white.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: Colors.white),
         boxShadow: [
@@ -435,17 +529,37 @@ class _ImportantScreenState extends State<ImportantScreen>
       ),
       child: Row(
         children: [
-          _stat('Overdue', _overdueCount, _C.red, Icons.warning_amber_rounded),
+          _stat(
+            'Overdue',
+            overdue,
+            _C.red,
+            Icons.warning_amber_rounded,
+          ),
           _divider(),
-          _stat('Today', _todayCount, _C.amberDark, Icons.today_rounded),
+          _stat(
+            'Today',
+            today,
+            _C.amberDark,
+            Icons.today_rounded,
+          ),
           _divider(),
-          _stat('Upcoming', _upcomingCount, _C.blue, Icons.upcoming_rounded),
+          _stat(
+            'Upcoming',
+            upcoming,
+            _C.blue,
+            Icons.upcoming_rounded,
+          ),
         ],
       ),
     );
   }
 
-  Widget _stat(String label, int value, Color color, IconData icon) {
+  Widget _stat(
+      String label,
+      int value,
+      Color color,
+      IconData icon,
+      ) {
     return Expanded(
       child: Column(
         children: [
@@ -454,18 +568,12 @@ class _ImportantScreenState extends State<ImportantScreen>
             children: [
               Icon(icon, size: 16, color: color),
               const SizedBox(width: 4),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                transitionBuilder: (c, a) =>
-                    ScaleTransition(scale: a, child: c),
-                child: Text(
-                  '$value',
-                  key: ValueKey(value),
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: color,
-                  ),
+              Text(
+                '$value',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: color,
                 ),
               ),
             ],
@@ -497,33 +605,40 @@ class _ImportantScreenState extends State<ImportantScreen>
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: _filters.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        separatorBuilder: (_, __) =>
+        const SizedBox(width: 10),
         itemBuilder: (context, i) {
-          final f = _filters[i];
-          final selected = _filter == f;
+          final filter = _filters[i];
+          final selected = _filter == filter;
+
           return _PressScale(
-            onTap: () => setState(() => _filter = f),
+            onTap: () => setState(() => _filter = filter),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOut,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+              ),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 gradient: selected
-                    ? const LinearGradient(colors: [_C.sky, _C.deepBlue])
+                    ? const LinearGradient(
+                  colors: [_C.sky, _C.deepBlue],
+                )
                     : null,
                 color: selected ? null : Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    color: _C.blue.withValues(alpha: selected ? 0.3 : 0.08),
+                    color: _C.blue.withValues(
+                      alpha: selected ? 0.25 : 0.08,
+                    ),
                     blurRadius: 12,
                     offset: const Offset(0, 5),
                   ),
                 ],
               ),
               child: Text(
-                f,
+                filter,
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: selected ? Colors.white : _C.ink,
@@ -536,73 +651,81 @@ class _ImportantScreenState extends State<ImportantScreen>
     );
   }
 
-  Widget _buildEmpty() {
+  Widget _buildEmpty(bool noTasks) {
     return Center(
-      key: const ValueKey('empty'),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.6, end: 1),
-            duration: const Duration(milliseconds: 700),
-            curve: Curves.elasticOut,
-            builder: (_, v, child) => Transform.scale(scale: v, child: child),
-            child: Container(
-              width: 110,
-              height: 110,
+      key: ValueKey(noTasks ? 'empty' : 'filtered'),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 100,
+              height: 100,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
                   colors: [Color(0xFFFFCA28), _C.amberDark],
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: _C.amber.withValues(alpha: 0.4),
-                    blurRadius: 28,
-                    offset: const Offset(0, 14),
+                    color: _C.amber.withValues(alpha: 0.3),
+                    blurRadius: 25,
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
               child: const Icon(
                 Icons.star_outline_rounded,
                 color: Colors.white,
-                size: 56,
+                size: 52,
               ),
             ),
-          ),
-          const SizedBox(height: 22),
-          Text(
-            _tasks.isEmpty
-                ? 'No important tasks'
-                : 'Nothing in "$_filter"',
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: _C.ink,
+            const SizedBox(height: 22),
+            Text(
+              noTasks
+                  ? 'No important tasks'
+                  : 'Nothing in "$_filter"',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: _C.ink,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Starred tasks will show up here ⭐',
-            style: TextStyle(fontSize: 15, color: _C.muted),
-          ),
-        ],
+            const SizedBox(height: 8),
+            const Text(
+              'Star a task to see it here ⭐',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                color: _C.muted,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _blob(double size, Color color) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-  );
+  Widget _blob(double size, Color color) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+      ),
+    );
+  }
 }
 
-// ─────────────────────────── Task card ───────────────────────────
+// ------------------------------------------------------------
+// Important task card
+// ------------------------------------------------------------
+
 class _ImportantCard extends StatefulWidget {
-  final ImportantTask task;
+  final Todo task;
   final int index;
   final VoidCallback onComplete;
   final VoidCallback onUnmark;
@@ -625,13 +748,15 @@ class _ImportantCardState extends State<_ImportantCard>
     with SingleTickerProviderStateMixin {
   late final AnimationController _exit;
   bool _checked = false;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
+
     _exit = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 350),
+      duration: const Duration(milliseconds: 300),
       value: 1,
     );
   }
@@ -643,12 +768,24 @@ class _ImportantCardState extends State<_ImportantCard>
   }
 
   Future<void> _tapComplete() async {
-    if (_checked) return;
-    setState(() => _checked = true);
-    await Future.delayed(const Duration(milliseconds: 350));
+    if (_checked || _busy) return;
+
+    setState(() {
+      _checked = true;
+      _busy = true;
+    });
+
+    await Future.delayed(
+      const Duration(milliseconds: 250),
+    );
+
     if (!mounted) return;
+
     await _exit.reverse();
-    if (mounted) widget.onComplete();
+
+    if (mounted) {
+      widget.onComplete();
+    }
   }
 
   Color get _priorityColor {
@@ -676,61 +813,75 @@ class _ImportantCardState extends State<_ImportantCard>
   }
 
   (String, bool) get _dueInfo {
-    final due = widget.task.due;
+    final due = widget.task.dueDate;
+
     if (due == null) return ('No due date', false);
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final d = DateTime(due.year, due.month, due.day);
-    final diff = d.difference(today).inDays;
-    if (diff < 0) return ('Overdue', true);
-    if (diff == 0) return ('Today', false);
-    if (diff == 1) return ('Tomorrow', false);
-    const m = [
+    final date = DateTime(due.year, due.month, due.day);
+    final difference = date.difference(today).inDays;
+
+    if (difference < 0) return ('Overdue', true);
+    if (difference == 0) return ('Today', false);
+    if (difference == 1) return ('Tomorrow', false);
+
+    const months = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
-    return ('${m[d.month - 1]} ${d.day}', false);
+
+    return ('${months[due.month - 1]} ${due.day}', false);
   }
 
   @override
   Widget build(BuildContext context) {
     final task = widget.task;
     final (dueText, overdue) = _dueInfo;
-    final delay = 420 + (widget.index.clamp(0, 8) * 90);
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: delay),
-      curve: Curves.easeOutCubic,
-      builder: (context, v, child) => Opacity(
-        opacity: v,
-        child: Transform.translate(
-          offset: Offset(0, 24 * (1 - v)),
-          child: child,
-        ),
+      duration: Duration(
+        milliseconds: 350 + widget.index.clamp(0, 8) * 70,
       ),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, 20 * (1 - value)),
+            child: child,
+          ),
+        );
+      },
       child: SizeTransition(
-        sizeFactor: CurvedAnimation(parent: _exit, curve: Curves.easeInOut),
+        sizeFactor: CurvedAnimation(
+          parent: _exit,
+          curve: Curves.easeInOut,
+        ),
         child: FadeTransition(
           opacity: _exit,
           child: Padding(
             padding: const EdgeInsets.only(bottom: 14),
             child: Dismissible(
-              key: ValueKey('dismiss_${task.id}'),
+              key: ValueKey('important_${task.id}'),
+              direction: _busy
+                  ? DismissDirection.none
+                  : DismissDirection.horizontal,
               background: _swipeBg(
                 color: _C.amberDark,
                 icon: Icons.star_border_rounded,
                 label: 'Unmark',
-                alignment: Alignment.centerLeft,
+                left: true,
               ),
               secondaryBackground: _swipeBg(
                 color: Colors.redAccent,
                 icon: Icons.delete_rounded,
                 label: 'Delete',
-                alignment: Alignment.centerRight,
+                left: false,
               ),
-              onDismissed: (dir) {
-                if (dir == DismissDirection.startToEnd) {
+              onDismissed: (direction) {
+                if (direction == DismissDirection.startToEnd) {
                   widget.onUnmark();
                 } else {
                   widget.onDelete();
@@ -738,7 +889,7 @@ class _ImportantCardState extends State<_ImportantCard>
               },
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.95),
+                  color: Colors.white.withValues(alpha: 0.96),
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(
                     color: overdue
@@ -758,7 +909,8 @@ class _ImportantCardState extends State<_ImportantCard>
                   borderRadius: BorderRadius.circular(22),
                   child: IntrinsicHeight(
                     child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment:
+                      CrossAxisAlignment.stretch,
                       children: [
                         Container(
                           width: 6,
@@ -766,22 +918,35 @@ class _ImportantCardState extends State<_ImportantCard>
                             gradient: LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
-                              colors: [Color(0xFFFFCA28), _C.amberDark],
+                              colors: [
+                                Color(0xFFFFCA28),
+                                _C.amberDark,
+                              ],
                             ),
                           ),
                         ),
                         Expanded(
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+                            padding: const EdgeInsets.fromLTRB(
+                              14, 14, 12, 14,
+                            ),
                             child: Row(
                               children: [
                                 _checkButton(),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                    child: _content(task, dueText, overdue)),
+                                  child: _content(
+                                    task,
+                                    dueText,
+                                    overdue,
+                                  ),
+                                ),
                                 const SizedBox(width: 6),
-                                const Icon(Icons.star_rounded,
-                                    color: _C.amber, size: 26),
+                                const Icon(
+                                  Icons.star_rounded,
+                                  color: _C.amber,
+                                  size: 25,
+                                ),
                               ],
                             ),
                           ),
@@ -798,18 +963,22 @@ class _ImportantCardState extends State<_ImportantCard>
     );
   }
 
-  Widget _content(ImportantTask task, String dueText, bool overdue) {
+  Widget _content(
+      Todo task,
+      String dueText,
+      bool overdue,
+      ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AnimatedDefaultTextStyle(
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(milliseconds: 200),
           style: TextStyle(
-            fontSize: 16.5,
+            fontSize: 16,
             fontWeight: FontWeight.w800,
             color: _checked ? _C.muted : _C.ink,
-            decoration: _checked ? TextDecoration.lineThrough : null,
-            decorationColor: _C.muted,
+            decoration:
+            _checked ? TextDecoration.lineThrough : null,
           ),
           child: Text(task.title),
         ),
@@ -819,7 +988,11 @@ class _ImportantCardState extends State<_ImportantCard>
             task.description,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, color: _C.muted, height: 1.3),
+            style: const TextStyle(
+              fontSize: 13,
+              color: _C.muted,
+              height: 1.3,
+            ),
           ),
         ],
         const SizedBox(height: 10),
@@ -828,21 +1001,38 @@ class _ImportantCardState extends State<_ImportantCard>
           runSpacing: 6,
           children: [
             _chip(
-              overdue ? Icons.warning_amber_rounded : Icons.schedule_rounded,
+              overdue
+                  ? Icons.warning_amber_rounded
+                  : Icons.schedule_rounded,
               dueText,
-              overdue ? Colors.red : _C.muted,
+              overdue ? _C.red : _C.muted,
             ),
-            _chip(_categoryIcon, task.category, _C.blue),
-            _chip(Icons.flag_rounded, task.priority, _priorityColor),
+            _chip(
+              _categoryIcon,
+              task.category,
+              _C.blue,
+            ),
+            _chip(
+              Icons.flag_rounded,
+              task.priority,
+              _priorityColor,
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _chip(IconData icon, String text, Color color) {
+  Widget _chip(
+      IconData icon,
+      String text,
+      Color color,
+      ) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 9,
+        vertical: 4,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
@@ -870,14 +1060,15 @@ class _ImportantCardState extends State<_ImportantCard>
       behavior: HitTestBehavior.opaque,
       onTap: _tapComplete,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 250),
         width: 34,
         height: 34,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: _checked
-              ? const LinearGradient(colors: [_C.sky, _C.deepBlue])
+              ? const LinearGradient(
+            colors: [_C.sky, _C.deepBlue],
+          )
               : null,
           border: Border.all(
             color: _checked ? Colors.transparent : _C.sky,
@@ -886,9 +1077,12 @@ class _ImportantCardState extends State<_ImportantCard>
         ),
         child: AnimatedScale(
           scale: _checked ? 1 : 0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.elasticOut,
-          child: const Icon(Icons.check_rounded, color: Colors.white, size: 20),
+          duration: const Duration(milliseconds: 250),
+          child: const Icon(
+            Icons.check_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
         ),
       ),
     );
@@ -898,11 +1092,12 @@ class _ImportantCardState extends State<_ImportantCard>
     required Color color,
     required IconData icon,
     required String label,
-    required Alignment alignment,
+    required bool left,
   }) {
-    final left = alignment == Alignment.centerLeft;
     return Container(
-      alignment: alignment,
+      alignment: left
+          ? Alignment.centerLeft
+          : Alignment.centerRight,
       padding: const EdgeInsets.symmetric(horizontal: 22),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.9),
@@ -931,11 +1126,18 @@ class _ImportantCardState extends State<_ImportantCard>
   );
 }
 
-/// Shrinks slightly while pressed.
+// ------------------------------------------------------------
+// Press animation
+// ------------------------------------------------------------
+
 class _PressScale extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
-  const _PressScale({required this.child, required this.onTap});
+
+  const _PressScale({
+    required this.child,
+    required this.onTap,
+  });
 
   @override
   State<_PressScale> createState() => _PressScaleState();
@@ -953,9 +1155,8 @@ class _PressScaleState extends State<_PressScale> {
       onTapCancel: () => setState(() => _down = false),
       onTap: widget.onTap,
       child: AnimatedScale(
-        scale: _down ? 0.95 : 1.0,
+        scale: _down ? 0.95 : 1,
         duration: const Duration(milliseconds: 130),
-        curve: Curves.easeOut,
         child: widget.child,
       ),
     );

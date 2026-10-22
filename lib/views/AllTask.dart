@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/todo_viewmodel.dart';
 import '../models/todo.dart';
+import 'add_task_screen.dart';
 
 class _C {
   static const sky = Color(0xFF5BC0F8);
@@ -14,12 +15,10 @@ class _C {
   static const lightGreen = Color(0xFF81C784);
 }
 
-/// Simple todo model used by this screen.
-/// Replace with your own model / data source.
+
 
 
 class AllTodoScreen extends StatefulWidget {
-  /// Pass your real todos here. If null, demo data is shown.
   final List<Todo>? todos;
   const AllTodoScreen({super.key, this.todos});
 
@@ -86,7 +85,7 @@ class _AllTodoScreenState extends State<AllTodoScreen>
     final index = _todos.indexWhere((t) => t.id == todo.id);
     if (index == -1) return;
     setState(() => _todos[index] = todo.copyWith(completed: !todo.completed));
-    // TODO: update the todo in your database / provider here.
+
   }
 
   void _delete(Todo todo) {
@@ -96,13 +95,13 @@ class _AllTodoScreenState extends State<AllTodoScreen>
     _snack('Task deleted', onUndo: () {
       setState(() => _todos.insert(index.clamp(0, _todos.length), todo));
     });
-    // TODO: delete the todo from your database / provider here.
+
   }
 
   void _add(Todo todo) {
     setState(() => _todos.insert(0, todo));
-    _snack('Task added ✨');
-    // TODO: save the new todo to your database / provider here.
+    _snack('Task added');
+
   }
 
   int _nextId() {
@@ -309,17 +308,10 @@ class _AllTodoScreenState extends State<AllTodoScreen>
                       const SizedBox(height: 22),
                       _PressScale(
                         onTap: () {
-                          final title = titleCtrl.text.trim();
-                          if (title.isEmpty) return;
-                          Navigator.pop(
-                            ctx,
-                            Todo(
-                              id: _nextId(),
-                              title: title,
-                              description: descCtrl.text.trim(),
-                              category: category,
-                              priority: priority,
-                              dueDate: due,
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const AddTodoScreen(),
                             ),
                           );
                         },

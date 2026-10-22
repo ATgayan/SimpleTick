@@ -34,16 +34,25 @@ class TodoViewModel extends ChangeNotifier {
     await getAllTodos();
   }
 
+
   // PENDING
   Future<void> getPendingTodos() async {
     _isLoading = true;
     notifyListeners();
 
-    _todos = await _repository.getPendingTodos();
-
-    _isLoading = false;
-    notifyListeners();
+    try {
+      _todos = await _repository.getPendingTodos();
+    } catch (e) {
+      debugPrint('Error loading pending todos: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
+
+
+
+
 
   // COMPLETED
   Future<void> getCompletedTodos() async {
