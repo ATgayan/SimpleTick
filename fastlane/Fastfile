@@ -9,7 +9,7 @@ platform :android do
       package_name: 'com.rx.todo',
       aab: 'build/app/outputs/bundle/release/app-release.aab',
       # Pass the JSON key data from the environment variable passed by GitHub Actions
-      json_key_data: ENV['KEYSTORE_BASE64'],
+      json_key_data: ENV['PLAY_STORE_JSON_KEY'],
       skip_upload_images: true,
       skip_upload_screenshots: true
     )
