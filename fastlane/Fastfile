@@ -6,9 +6,9 @@ platform :android do
     upload_to_play_store(
       track: 'internal',
       # Default Flutter AAB build output path:
-      aab: '../build/app/outputs/bundle/release/app-release.aab',
+      aab: 'build/app/outputs/bundle/release/app-release.aab',
       # Pass the JSON key data from the environment variable passed by GitHub Actions
-      json_key_data: ENV['PLAY_STORE_JSON_KEY'],
+      json_key_data: ENV['KEYSTORE_BASE64'],
       skip_upload_images: true,
       skip_upload_screenshots: true
     )
