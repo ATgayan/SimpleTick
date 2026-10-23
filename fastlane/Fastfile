@@ -1,0 +1,16 @@
+default_platform(:android)
+
+platform :android do
+  desc "Deploy Flutter release to Google Play Internal Testing"
+  lane :internal do
+    upload_to_play_store(
+      track: 'internal',
+      # Default Flutter AAB build output path:
+      aab: '../build/app/outputs/bundle/release/app-release.aab',
+      # Pass the JSON key data from the environment variable passed by GitHub Actions
+      json_key_data: ENV['PLAY_STORE_JSON_KEY'],
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end
