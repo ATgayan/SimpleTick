@@ -463,13 +463,13 @@ class _AllTodoScreenState extends State<AllTodoScreen>
                 ],
               ),
             ),
-            Positioned(
-              right: 22,
-              bottom: 26,
-              child: SafeArea(
-                child: _reveal(_buildFab(), 0.5, 1.0),
-              ),
-            ),
+            // Positioned(
+            //   right: 22,
+            //   bottom: 26,
+            //   child: SafeArea(
+            //     child: _reveal(_buildFab(), 0.5, 1.0),
+            //   ),
+            // ),
           ],
         ),
       ),
@@ -778,45 +778,45 @@ class _AllTodoScreenState extends State<AllTodoScreen>
     );
   }
 
-  Widget _buildFab() {
-    return _PressScale(
-      onTap: _openAddSheet,
-      child: Container(
-        height: 58,
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [_C.sky, _C.deepBlue],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: _C.blue.withValues(alpha: 0.45),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add_rounded, color: Colors.white, size: 26),
-            SizedBox(width: 6),
-            Text(
-              'Add task',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  // Widget _buildFab() {
+  //   return _PressScale(
+  //     onTap: _openAddSheet,
+  //     child: Container(
+  //       height: 58,
+  //       padding: const EdgeInsets.symmetric(horizontal: 22),
+  //       decoration: BoxDecoration(
+  //         borderRadius: BorderRadius.circular(20),
+  //         gradient: const LinearGradient(
+  //           begin: Alignment.topLeft,
+  //           end: Alignment.bottomRight,
+  //           colors: [_C.sky, _C.deepBlue],
+  //         ),
+  //         boxShadow: [
+  //           BoxShadow(
+  //             color: _C.blue.withValues(alpha: 0.45),
+  //             blurRadius: 20,
+  //             offset: const Offset(0, 10),
+  //           ),
+  //         ],
+  //       ),
+  //       child: const Row(
+  //         mainAxisSize: MainAxisSize.min,
+  //         children: [
+  //           Icon(Icons.add_rounded, color: Colors.white, size: 26),
+  //           SizedBox(width: 6),
+  //           Text(
+  //             'Add task',
+  //             style: TextStyle(
+  //               color: Colors.white,
+  //               fontWeight: FontWeight.w900,
+  //               fontSize: 15,
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //     ),
+  //   );
+  // }
 
   Widget _buildEmpty() {
     final searching = _query.trim().isNotEmpty;
