@@ -112,7 +112,7 @@ class _PendingScreenState extends State<PendingScreen>
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Task completed! ✅'),
+          content: Text('Task completed!'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -792,12 +792,15 @@ class _PendingCardState extends State<_PendingCard>
           duration: const Duration(milliseconds: 250),
           style: TextStyle(
             fontSize: 16.5,
+
             fontWeight: FontWeight.w800,
             color: _checked ? _C.muted : _C.ink,
             decoration:
             _checked ? TextDecoration.lineThrough : null,
           ),
-          child: Text(task.title),
+          child: Text(task.title,
+          maxLines: 1,
+            overflow: TextOverflow.ellipsis,),
         ),
         if (task.description.isNotEmpty) ...[
           const SizedBox(height: 4),
@@ -952,7 +955,14 @@ class _PendingCardState extends State<_PendingCard>
   );
 }
 
-// Button animation.
+
+
+
+
+
+
+
+
 class _PressScale extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
@@ -965,6 +975,9 @@ class _PressScale extends StatefulWidget {
   @override
   State<_PressScale> createState() => _PressScaleState();
 }
+
+
+
 
 class _PressScaleState extends State<_PressScale> {
   bool _down = false;

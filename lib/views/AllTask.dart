@@ -104,6 +104,7 @@ class _AllTodoScreenState extends State<AllTodoScreen>
 
   }
 
+
   int _nextId() {
     if (_todos.isEmpty) return 1;
 
@@ -386,7 +387,8 @@ class _AllTodoScreenState extends State<AllTodoScreen>
       );
     }
 
-    final list = viewModel.todos;
+    _todos = viewModel.todos;
+    final list = _visible;
 
     return Scaffold(
       body: Container(
@@ -826,7 +828,7 @@ class _AllTodoScreenState extends State<AllTodoScreen>
         ? 'No results found'
         : 'No $_filter tasks';
     final subtitle = _todos.isEmpty
-        ? 'Tap "Add task" to get started 🚀'
+        ? 'Tap "Add task" to get started...'
         : 'Try a different search or filter';
 
     return Center(
@@ -868,7 +870,7 @@ class _AllTodoScreenState extends State<AllTodoScreen>
           Text(
             title,
             style: const TextStyle(
-              fontSize: 22,
+              fontSize: 10,
               fontWeight: FontWeight.w900,
               color: _C.ink,
             ),
@@ -1057,7 +1059,10 @@ class _TodoCard extends StatelessWidget {
             decoration: done ? TextDecoration.lineThrough : null,
             decorationColor: _C.muted,
           ),
-          child: Text(todo.title),
+          child: Text(todo.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         if (todo.description.isNotEmpty) ...[
           const SizedBox(height: 4),
@@ -1142,7 +1147,7 @@ class _TodoCard extends StatelessWidget {
   }
 }
 
-/// Shrinks slightly while pressed.
+
 class _PressScale extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
