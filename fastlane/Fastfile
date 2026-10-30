@@ -22,7 +22,7 @@ desc "Upload to Google Play Closed Testing"
       track: "alpha",
       aab: "build/app/outputs/bundle/release/app-release.aab",
       json_key_data: ENV["PLAY_STORE_JSON_KEY"],
-      release_status: "completed",
+      release_status: "draft",
       skip_upload_metadata: true,
       skip_upload_images: true,
       skip_upload_screenshots: true
