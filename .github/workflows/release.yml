@@ -60,10 +60,10 @@ jobs:
       - name: Build signed Android App Bundle
         run: flutter build appbundle --release
 
-      - name: Upload to Google Play Internal Testing
+      - name: Upload to Google Play Closed Testing
         env:
           PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
-        run: bundle exec fastlane android internal
+        run: bundle exec fastlane android closed
 
       - name: Clean up credentials
         if: always()
