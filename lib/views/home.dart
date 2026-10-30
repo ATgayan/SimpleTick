@@ -13,7 +13,7 @@ import '../viewmodels/todo_viewmodel.dart';
 
 // ─────────────────────────── Theme colors ───────────────────────────
 class AppColors {
-  static const skyLight = Color(0xFFD9F0FF);
+  static const skyLight = Color(0xFFFFF0FE);
   static const sky = Color(0xFF5BC0F8);
   static const blue = Color(0xFF2196F3);
   static const deepBlue = Color(0xFF1565C0);
@@ -402,11 +402,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   // ───────────────────────────── Grid ─────────────────────────────
   Widget _buildGrid() {
+    final viewModel = context.watch<TodoViewModel>();
+    final todos = viewModel.todos;
+
+    final totalCount = todos.length;
+    final pendingCount = todos.where((t) => !t.completed).length;
+    final completedCount = todos.where((t) => t.completed).length;
+    final importantCount = todos.where((t) => t.important).length;
+
+
     final items = <_MenuItem>[
-      _MenuItem('All Todos', '24 tasks', Icons.list_alt_rounded, Colors.blue,()=>_open(const AllTodoScreen())),
-      _MenuItem('Pending', '9 tasks', Icons.pending_actions_rounded, Colors.orange,()=>_open(const PendingScreen())),
-      _MenuItem('Completed', '15 tasks', Icons.check_circle_rounded, Colors.green,()=>_open(const CompletedScreen())),
-      _MenuItem('Important', '4 tasks', Icons.star_rounded, Colors.amber,()=>_open(const ImportantScreen())),
+      _MenuItem('All Todos', '$totalCount tasks', Icons.list_alt_rounded, Colors.blue,()=>_open(const AllTodoScreen())),
+      _MenuItem('Pending', '$pendingCount tasks', Icons.pending_actions_rounded, Colors.orange,()=>_open(const PendingScreen())),
+      _MenuItem('Completed', '$completedCount tasks', Icons.check_circle_rounded, Colors.green,()=>_open(const CompletedScreen())),
+      _MenuItem('Important', '$importantCount tasks', Icons.star_rounded, Colors.amber,()=>_open(const ImportantScreen())),
     ];
 
     return GridView.builder(

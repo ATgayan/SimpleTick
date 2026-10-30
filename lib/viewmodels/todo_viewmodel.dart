@@ -27,12 +27,36 @@ class TodoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+
+
+
+
   // ADD
   Future<void> addTodo(Todo todo) async {
+    // Validate title
+    if (todo.title.trim().isEmpty) {
+      throw Exception('Task title cannot be empty');
+    }
+
+    if (todo.title.trim().length > 40) {
+      throw Exception('Task title cannot exceed 40 characters');
+    }
+
+    // Validate description
+    if (todo.description.length > 200) {
+      throw Exception('Description cannot exceed 200 characters');
+    }
+
     await _repository.addTodo(todo);
 
     await getAllTodos();
   }
+
+
+
+
+
+
 
 
   // PENDING
@@ -65,6 +89,9 @@ class TodoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+
+
+
   // IMPORTANT
   Future<void> getImportantTodos() async {
     _isLoading = true;
@@ -83,12 +110,17 @@ class TodoViewModel extends ChangeNotifier {
     await getAllTodos();
   }
 
+
+
   // DELETE
   Future<void> deleteTodo(int id) async {
     await _repository.deleteTodo(id);
 
     await getAllTodos();
   }
+
+
+
 
   // TOGGLE COMPLETED
   Future<void> toggleCompleted(

@@ -284,6 +284,7 @@ class _AddTodoScreenState extends State<AddTodoScreen>
         children: [
           TextFormField(
             controller: _titleCtrl,
+            maxLength: 50,
             textCapitalization: TextCapitalization.sentences,
             style: const TextStyle(
               fontSize: 17,
@@ -299,6 +300,7 @@ class _AddTodoScreenState extends State<AddTodoScreen>
           TextFormField(
             controller: _descCtrl,
             maxLines: 4,
+            maxLength: 100,
             textCapitalization: TextCapitalization.sentences,
             style: const TextStyle(fontSize: 15, color: _C.ink),
             decoration:

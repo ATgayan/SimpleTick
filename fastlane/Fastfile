@@ -14,4 +14,18 @@ platform :android do
       skip_upload_screenshots: true
     )
   end
+
+desc "Upload to Google Play Closed Testing"
+  lane :closed do
+    upload_to_play_store(
+      package_name: "com.rx.todo",
+      track: "alpha",
+      aab: "build/app/outputs/bundle/release/app-release.aab",
+      json_key_data: ENV["PLAY_STORE_JSON_KEY"],
+      release_status: "completed",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
 end
